@@ -25,11 +25,26 @@ const seed = {
     {id:'e1',type:'Event',title:'Free Heart Health Screening Camp',date:'2026-07-12',excerpt:'ECG, blood pressure and cardiac risk review for adults over 40.',location:'VSM Community Hall'},
     {id:'e2',type:'News',title:'VSM launches 24×7 stroke response unit',date:'2026-06-08',excerpt:'A dedicated rapid-response pathway connects emergency, imaging and neurology teams.',location:'VSM Hospital'},
     {id:'e3',type:'Event',title:'Prenatal wellness workshop',date:'2026-07-26',excerpt:'A practical session on nutrition, movement and preparing for birth.',location:'Women’s Health Centre'}
-  ], appointments: [], feedback: [], contacts: []
+  ], appointments: [], feedback: [], contacts: [], nextToken: 1
 };
 
 function ensureStore() { fs.mkdirSync(DATA_DIR,{recursive:true}); if(!fs.existsSync(STORE)) fs.writeFileSync(STORE,JSON.stringify(seed,null,2)); }
-function readStore(){ ensureStore(); return JSON.parse(fs.readFileSync(STORE,'utf8')); }
+function readStore(){
+  ensureStore();
+  const store = JSON.parse(fs.readFileSync(STORE,'utf8'));
+  if (store.nextToken === undefined) {
+    let maxToken = 0;
+    if (store.appointments && store.appointments.length) {
+      store.appointments.forEach(a => {
+        const num = Number(a.id);
+        if (!isNaN(num) && num > maxToken) maxToken = num;
+      });
+    }
+    store.nextToken = maxToken + 1;
+    const tmp=STORE+'.tmp'; fs.writeFileSync(tmp,JSON.stringify(store,null,2)); fs.renameSync(tmp,STORE);
+  }
+  return store;
+}
 function writeStore(data){ const tmp=STORE+'.tmp'; fs.writeFileSync(tmp,JSON.stringify(data,null,2)); fs.renameSync(tmp,STORE); }
 function send(res,status,data,headers={}){ const body=typeof data==='string'?data:JSON.stringify(data); res.writeHead(status,{'Content-Type':typeof data==='string'?'text/plain; charset=utf-8':'application/json; charset=utf-8','Cache-Control':'no-store',...headers}); res.end(body); }
 function parseCookies(req){ return Object.fromEntries((req.headers.cookie||'').split(';').filter(Boolean).map(v=>{const i=v.indexOf('=');return [v.slice(0,i).trim(),decodeURIComponent(v.slice(i+1))]})); }
@@ -55,7 +70,13 @@ async function api(req,res,url){
   if(method==='GET' && url.pathname==='/api/admin/session') return send(res,isAdmin(req)?200:401,{authenticated:isAdmin(req)});
   if(method==='POST' && url.pathname==='/api/appointments'){
     const b=await body(req), required=['name','phone','age','gender','department','doctor','date','time','reason']; if(required.some(k=>!clean(b[k]))) return send(res,400,{error:'Please complete every required field.'}); if(!validPhone(clean(b.phone))) return send(res,400,{error:'Enter a valid phone number.'});
-    const data=readStore(), record={id:id('APT-'),createdAt:new Date().toISOString(),status:'Pending',...Object.fromEntries(required.map(k=>[k,clean(b[k],k==='reason'?1000:200)]))};data.appointments.unshift(record);writeStore(data);return send(res,201,{ok:true,reference:record.id});
+    const data=readStore();
+    const token=data.nextToken||1;
+    data.nextToken=token+1;
+    const record={id:String(token),tokenNumber:token,createdAt:new Date().toISOString(),status:'Pending',...Object.fromEntries(required.map(k=>[k,clean(b[k],k==='reason'?1000:200)]))};
+    data.appointments.unshift(record);
+    writeStore(data);
+    return send(res,201,{ok:true,reference:record.id,appointment:record});
   }
   if(method==='POST' && url.pathname==='/api/feedback'){
     const b=await body(req);if(!clean(b.name)||!Number(b.rating)||!clean(b.comments))return send(res,400,{error:'Name, rating and comments are required.'});const data=readStore();data.feedback.unshift({id:id('FDB-'),createdAt:new Date().toISOString(),name:clean(b.name),rating:Math.min(5,Math.max(1,Number(b.rating))),comments:clean(b.comments,1200)});writeStore(data);return send(res,201,{ok:true});
@@ -63,6 +84,28 @@ async function api(req,res,url){
   if(method==='POST' && url.pathname==='/api/contact'){const b=await body(req);if(!clean(b.name)||!validPhone(clean(b.phone))||!clean(b.message))return send(res,400,{error:'Please enter valid contact details.'});const data=readStore();data.contacts.unshift({id:id('CON-'),createdAt:new Date().toISOString(),name:clean(b.name),phone:clean(b.phone),email:clean(b.email),message:clean(b.message,1200)});writeStore(data);return send(res,201,{ok:true});}
   if(url.pathname.startsWith('/api/admin/')&&!isAdmin(req))return send(res,401,{error:'Please sign in again.'});
   if(method==='GET' && url.pathname==='/api/admin/overview'){const d=readStore();return send(res,200,{doctors:d.doctors,events:d.events,appointments:d.appointments,feedback:d.feedback});}
+  
+  const appointmentMatch=url.pathname.match(/^\/api\/admin\/appointments(?:\/([^/]+))?$/);
+  if(appointmentMatch && ['PUT','DELETE'].includes(method)){
+    const data=readStore();
+    if(method==='DELETE'){
+      data.appointments=data.appointments.filter(x=>x.id!==appointmentMatch[1]);
+      writeStore(data);
+      return send(res,200,{ok:true});
+    }
+    const b=await body(req);
+    const required=['name','phone','age','gender','department','doctor','date','time','reason','status'];
+    if(required.slice(0, 9).some(k=>!clean(b[k]))) return send(res,400,{error:'Complete all required patient fields.'});
+    if(!validPhone(clean(b.phone))) return send(res,400,{error:'Enter a valid phone number.'});
+    const i=data.appointments.findIndex(x=>x.id===appointmentMatch[1]);
+    if(i<0)return send(res,404,{error:'Appointment not found'});
+    const original=data.appointments[i];
+    const record={...original,...Object.fromEntries(required.map(k=>[k,clean(b[k],k==='reason'?1000:200)]))};
+    data.appointments[i]=record;
+    writeStore(data);
+    return send(res,200,record);
+  }
+
   const doctorMatch=url.pathname.match(/^\/api\/admin\/doctors(?:\/([^/]+))?$/);
   if(doctorMatch && ['POST','PUT','DELETE'].includes(method)){const data=readStore();if(method==='DELETE'){data.doctors=data.doctors.filter(x=>x.id!==doctorMatch[1]);writeStore(data);return send(res,200,{ok:true});}const b=await body(req);const fields=['name','department','specialization','qualification','experience','availability','photo'];if(fields.slice(0,6).some(k=>!clean(b[k])))return send(res,400,{error:'Complete all doctor fields.'});const record={id:doctorMatch[1]||id('d'),...Object.fromEntries(fields.map(k=>[k,k==='experience'?Number(b[k]):clean(b[k],b[k]?.startsWith?.('data:')?2_000_000:500)]))};if(method==='POST')data.doctors.unshift(record);else{const i=data.doctors.findIndex(x=>x.id===doctorMatch[1]);if(i<0)return send(res,404,{error:'Doctor not found'});data.doctors[i]=record;}writeStore(data);return send(res,200,record);}
   const eventMatch=url.pathname.match(/^\/api\/admin\/events(?:\/([^/]+))?$/);
