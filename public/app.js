@@ -38,12 +38,34 @@ function feedback(){return shell(`${pageHero('Patient feedback','Help us care be
 function login(){return header()+`<main id="main" class="login"><form class="loginbox" id="login-form"><span class="eyebrow">Secure staff access</span><h2 style="font-size:2.2rem;margin-top:12px">Admin login</h2><p class="muted">Manage doctors, appointments, announcements and feedback.</p><label for="admin-email">Email</label><input class="input" id="admin-email" type="email" name="email" required autocomplete="username" value="admin@vsmhospital.in"><label for="admin-password" style="margin-top:15px">Password</label><input class="input" id="admin-password" type="password" name="password" required autocomplete="current-password"><div id="form-result"></div><button class="btn" style="width:100%;margin-top:20px">Sign in</button><p class="muted" style="font-size:.72rem;margin-top:18px">Demo password: VSM@2026 · Change ADMIN_PASSWORD in production.</p></form></main>`}
 
 async function dashboard(){let d;try{d=await api('/api/admin/overview')}catch{location.hash='#/admin/login';return ''}state.admin=d;return `<div class="admin-shell"><header class="admin-head"><div class="nav"><a class="brand" href="#/" style="color:#fff"><span class="brandmark" style="background:#fff;color:var(--green)">✚</span><span>VSM Admin<small style="color:#9fbab3">HOSPITAL OPERATIONS</small></span></a><button class="btn secondary" id="logout">Sign out</button></div></header><main class="admin-wrap"><div class="container"><div class="section-head"><div><span class="eyebrow">Admin dashboard</span><h2 style="font-size:2.5rem">Good day, team.</h2></div><p>Patient submissions and content management in one quiet workspace.</p></div><div class="grid metrics"><div class="card metric"><span>Doctors</span><strong>${d.doctors.length}</strong></div><div class="card metric"><span>Upcoming updates</span><strong>${d.events.length}</strong></div><div class="card metric"><span>Appointments</span><strong>${d.appointments.length}</strong></div><div class="card metric"><span>Feedback</span><strong>${d.feedback.length}</strong></div></div><div class="tabs" role="tablist"><button class="tab active" data-tab="appointments">Appointments</button><button class="tab" data-tab="doctors">Doctors</button><button class="tab" data-tab="events">News & events</button><button class="tab" data-tab="feedback">Feedback</button></div><div id="admin-panel">${adminPanel('appointments')}</div></div></main><div id="admin-modal"></div></div>`}
-function downloadPDF(appt) {
+function getLogoBase64() {
+  return new Promise((resolve) => {
+    const img = new Image();
+    img.crossOrigin = 'anonymous';
+    img.src = '/assets/logo.svg';
+    img.onload = () => {
+      const canvas = document.createElement('canvas');
+      canvas.width = img.naturalWidth || 200;
+      canvas.height = img.naturalHeight || 200;
+      const ctx = canvas.getContext('2d');
+      ctx.drawImage(img, 0, 0);
+      resolve(canvas.toDataURL('image/png'));
+    };
+    img.onerror = () => resolve(null);
+  });
+}
+
+async function downloadPDF(appt) {
   const { jsPDF } = window.jspdf;
   const doc = new jsPDF();
   doc.setProperties({ title: `Appointment Slip - Token ${appt.tokenNumber || appt.id}`, subject: 'Appointment Confirmation', author: 'VSM Hospital' });
-  doc.setFillColor(8, 125, 107); doc.roundedRect(20, 15, 15, 15, 3, 3, 'F');
-  doc.setDrawColor(255, 255, 255); doc.setLineWidth(1.5); doc.line(24, 22.5, 31, 22.5); doc.line(27.5, 19, 27.5, 26);
+  const logoData = await getLogoBase64();
+  if (logoData) {
+    doc.addImage(logoData, 'PNG', 20, 12, 18, 18);
+  } else {
+    doc.setFillColor(254, 0, 0);
+    doc.circle(29, 21, 9, 'F');
+  }
   doc.setTextColor(8, 125, 107); doc.setFont('helvetica', 'bold'); doc.setFontSize(22); doc.text('VSM Hospital', 40, 22);
   doc.setTextColor(96, 115, 111); doc.setFont('helvetica', 'bold'); doc.setFontSize(7); doc.text('CARE. CLARITY. CONFIDENCE.', 40, 27);
   doc.setTextColor(96, 115, 111); doc.setFont('helvetica', 'normal'); doc.setFontSize(8); doc.text('Thattarambalam, Mavelikara, Alappuzha, Kerala', 190, 20, { align: 'right' }); doc.text('Phone: +91 80 4567 8900 | Email: care@vsmhospital.in', 190, 25, { align: 'right' });
@@ -57,7 +79,7 @@ function downloadPDF(appt) {
   let y = 62; doc.text(`Name:`, 20, y); doc.setFont('helvetica', 'bold'); doc.text(appt.name, 45, y); doc.setFont('helvetica', 'normal');
   y += 6; doc.text(`Age / Gender:`, 20, y); doc.text(`${appt.age} years / ${appt.gender}`, 45, y);
   y += 6; doc.text(`Phone:`, 20, y); doc.text(appt.phone, 45, y);
-  y += 6; doc.text(`Reference ID:`, 20, y); doc.setFont('helvetica', 'bold'); doc.text(appt.id, 45, y); doc.setFont('helvetica', 'normal');
+  y += 6; doc.text(`Token No.:`, 20, y); doc.setFont('helvetica', 'bold'); doc.text(appt.id, 45, y); doc.setFont('helvetica', 'normal');
   doc.setDrawColor(220, 231, 227); doc.setLineWidth(0.5); doc.line(20, 90, 190, 90);
   doc.setTextColor(96, 115, 111); doc.setFont('helvetica', 'bold'); doc.setFontSize(9); doc.text('VISIT DETAILS', 20, 98);
   doc.setFillColor(251, 250, 246); doc.roundedRect(20, 102, 170, 44, 3, 3, 'F');
@@ -87,14 +109,76 @@ if(tab==='doctors')return `<div style="display:flex;justify-content:flex-end;mar
 if(tab==='events')return `<div style="display:flex;justify-content:flex-end;margin-bottom:12px"><button class="btn" data-add="event">+ Add update</button></div><div class="table-wrap"><table><thead><tr><th>Type / title</th><th>Date</th><th>Location</th><th>Actions</th></tr></thead><tbody>${d.events.map(x=>`<tr><td><span class="tag">${escape(x.type)}</span><br><strong>${escape(x.title)}</strong><br>${escape(x.excerpt)}</td><td>${fmtDate(x.date)}</td><td>${escape(x.location)}</td><td class="actions-cell"><button class="btn ghost" data-edit-event="${x.id}">Edit</button><button class="btn danger" data-delete-event="${x.id}">Delete</button></td></tr>`).join('')}</tbody></table></div>`;
 return `<div class="table-wrap"><table><thead><tr><th>Patient</th><th>Rating</th><th>Comments</th><th>Submitted</th></tr></thead><tbody>${d.feedback.length?d.feedback.map(x=>`<tr><td><strong>${escape(x.name)}</strong></td><td style="color:#e39122">${'★'.repeat(x.rating)}${'☆'.repeat(5-x.rating)}</td><td>${escape(x.comments)}</td><td>${new Date(x.createdAt).toLocaleString('en-IN')}</td></tr>`).join(''):`<tr><td colspan="4" class="empty">No feedback yet.</td></tr>`}</tbody></table></div>`}
 
-function modalForm(kind,item={}){const doctor=kind==='doctor';const event=kind==='event';const appointment=kind==='appointment';const titleKind=doctor?'doctor':(appointment?'appointment':'update');return `<div class="modal" role="dialog" aria-modal="true"><form class="modalbox" id="admin-form" data-kind="${kind}" data-id="${item.id||''}"><div class="modalhead"><div><span class="eyebrow">${item.id?'Edit':'Add'} ${titleKind}</span><h3>${item.id?'Update details':'Create a new record'}</h3></div><button type="button" class="btn secondary" data-close>×</button></div><div class="formgrid">${doctor?`<div><label>Name</label><input class="input" name="name" required value="${escape(item.name||'')}"></div><div><label>Department</label><input class="input" name="department" required value="${escape(item.department||'')}"></div><div><label>Specialisation</label><input class="input" name="specialization" required value="${escape(item.specialization||'')}"></div><div><label>Qualification</label><input class="input" name="qualification" required value="${escape(item.qualification||'')}"></div><div><label>Experience (years)</label><input class="input" name="experience" type="number" required value="${item.experience||''}"></div><div><label>Availability</label><input class="input" name="availability" required value="${escape(item.availability||'')}"></div><div class="span2"><label>Photo URL</label><input class="input" name="photo" id="photo-url" value="${escape(item.photo||'')}"></div><div class="span2"><label>Or upload photo (max 1.5 MB)</label><input class="input" type="file" id="photo-file" accept="image/jpeg,image/png,image/webp"></div>`:((appointment)?`<div><label>Patient name</label><input class="input" name="name" required value="${escape(item.name||'')}"></div><div><label>Phone number</label><input class="input" name="phone" required pattern="[+0-9 -]{9,16}" value="${escape(item.phone||'')}"></div><div><label>Age</label><input class="input" name="age" type="number" min="0" max="120" required value="${item.age||''}"></div><div><label>Gender</label><select name="gender" required><option value="">Select</option><option ${item.gender==='Female'?'selected':''}>Female</option><option ${item.gender==='Male'?'selected':''}>Male</option><option ${item.gender==='Non-binary'?'selected':''}>Non-binary</option><option ${item.gender==='Prefer not to say'?'selected':''}>Prefer not to say</option></select></div><div><label>Department</label><select name="department" id="admin-appt-dept" required><option value="">Select department</option>${[...new Set(state.doctors.map(d=>d.department))].map(d=>`<option ${item.department===d?'selected':''}>${escape(d)}</option>`).join('')}</select></div><div><label>Doctor</label><select name="doctor" id="admin-appt-doctor" required><option value="">Select doctor</option>${state.doctors.map(d=>`<option ${item.doctor===d.name?'selected':''}>${escape(d.name)}</option>`).join('')}</select></div><div><label>Preferred date</label><input class="input" type="date" name="date" required value="${escape(item.date||'')}"></div><div><label>Preferred time</label><select name="time" required><option value="">Select time</option>${['09:00 AM','10:30 AM','12:00 PM','03:00 PM','05:30 PM'].map(t=>`<option ${item.time===t?'selected':''}>${t}</option>`).join('')}</select></div><div><label>Status</label><select name="status" required><option ${item.status==='Pending'?'selected':''}>Pending</option><option ${item.status==='Confirmed'?'selected':''}>Confirmed</option><option ${item.status==='Cancelled'?'selected':''}>Cancelled</option><option ${item.status==='Completed'?'selected':''}>Completed</option></select></div><div class="span2"><label>Reason for visit</label><textarea name="reason" rows="3" required>${escape(item.reason||'')}</textarea></div>`:`<div><label>Type</label><select name="type"><option ${item.type==='News'?'selected':''}>News</option><option ${item.type==='Event'?'selected':''}>Event</option></select></div><div><label>Date</label><input class="input" type="date" name="date" required value="${escape(item.date||'')}"></div><div class="span2"><label>Title</label><input class="input" name="title" required value="${escape(item.title||'')}"></div><div class="span2"><label>Summary</label><textarea name="excerpt" rows="3" required>${escape(item.excerpt||'')}</textarea></div><div class="span2"><label>Location</label><input class="input" name="location" required value="${escape(item.location||'')}"></div>`)}</div><div id="form-result"></div><button class="btn" style="margin-top:18px">Save ${titleKind}</button></form></div>`}
+function modalForm(kind,item={}){const doctor=kind==='doctor';const event=kind==='event';const appointment=kind==='appointment';const titleKind=doctor?'doctor':(appointment?'appointment':'update');return `<div class="modal" role="dialog" aria-modal="true"><form class="modalbox" id="admin-form" data-kind="${kind}" data-id="${item.id||''}"><div class="modalhead"><div><span class="eyebrow">${item.id?'Edit':'Add'} ${titleKind}</span><h3>${item.id?'Update details':'Create a new record'}</h3></div><button type="button" class="btn secondary" data-close>×</button></div><div class="formgrid">${doctor?`<div><label>Name</label><input class="input" name="name" required value="${escape(item.name||'')}"></div><div><label>Department</label><input class="input" name="department" required value="${escape(item.department||'')}"></div><div><label>Specialisation</label><input class="input" name="specialization" required value="${escape(item.specialization||'')}"></div><div><label>Qualification</label><input class="input" name="qualification" required value="${escape(item.qualification||'')}"></div><div><label>Experience (years)</label><input class="input" name="experience" type="number" required value="${item.experience||''}"></div><div><label>Availability</label><input class="input" name="availability" required value="${escape(item.availability||'')}"></div><div class="span2"><label>Photo URL</label><input class="input" name="photo" id="photo-url" value="${escape(item.photo||'')}"></div><div class="span2"><label>Or upload photo (max 1.5 MB)</label><input class="input" type="file" id="photo-file" accept="image/jpeg,image/png,image/webp"></div>`:((appointment)?`<div><label>Patient name</label><input class="input" name="name" required value="${escape(item.name||'')}"></div><div><label>Phone number</label><input class="input" name="phone" required pattern="[+0-9 -]{9,16}" value="${escape(item.phone||'')}"></div><div><label>Age</label><input class="input" name="age" type="number" min="0" max="120" required value="${item.age||''}"></div><div><label>Gender</label><select name="gender" required><option value="">Select</option><option ${item.gender==='Female'?'selected':''}>Female</option><option ${item.gender==='Male'?'selected':''}>Male</option><option ${item.gender==='Non-binary'?'selected':''}>Non-binary</option><option ${item.gender==='Prefer not to say'?'selected':''}>Prefer not to say</option></select></div><div><label>Department</label><select name="department" id="admin-appt-dept" required><option value="">Select department</option>${[...new Set(state.doctors.map(d=>d.department))].map(d=>`<option ${item.department===d?'selected':''}>${escape(d)}</option>`).join('')}</select></div><div><label>Doctor</label><select name="doctor" id="admin-appt-doctor" required><option value="">Select doctor</option></select></div><div><label>Preferred date</label><input class="input" type="date" name="date" required value="${escape(item.date||'')}"></div><div><label>Preferred time</label><select name="time" required><option value="">Select time</option>${['09:00 AM','10:30 AM','12:00 PM','03:00 PM','05:30 PM'].map(t=>`<option ${item.time===t?'selected':''}>${t}</option>`).join('')}</select></div><div><label>Status</label><select name="status" required><option ${item.status==='Pending'?'selected':''}>Pending</option><option ${item.status==='Confirmed'?'selected':''}>Confirmed</option><option ${item.status==='Cancelled'?'selected':''}>Cancelled</option><option ${item.status==='Completed'?'selected':''}>Completed</option></select></div><div class="span2"><label>Reason for visit</label><textarea name="reason" rows="3" required>${escape(item.reason||'')}</textarea></div>`:`<div><label>Type</label><select name="type"><option ${item.type==='News'?'selected':''}>News</option><option ${item.type==='Event'?'selected':''}>Event</option></select></div><div><label>Date</label><input class="input" type="date" name="date" required value="${escape(item.date||'')}"></div><div class="span2"><label>Title</label><input class="input" name="title" required value="${escape(item.title||'')}"></div><div class="span2"><label>Summary</label><textarea name="excerpt" rows="3" required>${escape(item.excerpt||'')}</textarea></div><div class="span2"><label>Location</label><input class="input" name="location" required value="${escape(item.location||'')}"></div>`)}</div><div id="form-result"></div><button class="btn" style="margin-top:18px">Save ${titleKind}</button></form></div>`}
 
 async function render(){window.scrollTo(0,0);try{if(!state.doctors.length)[state.doctors,state.events]=await Promise.all([api('/api/doctors'),api('/api/events')])}catch(e){toast('Unable to load hospital information.')}const route=(location.hash.slice(1).split('?')[0]||'/');let html;if(route==='/')html=home();else if(route==='/about')html=about();else if(route==='/departments')html=depts();else if(route==='/doctors')html=doctors();else if(route==='/packages')html=packagesPage();else if(route==='/appointment')html=appointment();else if(route==='/contact')html=contact();else if(route==='/feedback')html=feedback();else if(route==='/admin/login')html=login();else if(route==='/admin')html=await dashboard();else html=shell(pageHero('404','Page not found.','The page you requested may have moved.')+`<section class="section"><div class="container"><a class="btn" href="#/">Return home</a></div></section>`);$('#app').innerHTML=html;bind(route)}
 function formData(form){return Object.fromEntries(new FormData(form).entries())}
 function bind(route){const menu=$('.menu');if(menu)menu.onclick=()=>{const n=$('.navlinks');n.classList.toggle('open');menu.setAttribute('aria-expanded',n.classList.contains('open'))};
   $$('.department-card').forEach(x=>{const toggle=()=>{x.classList.toggle('open');x.setAttribute('aria-expanded',x.classList.contains('open'))};x.onclick=toggle;x.onkeydown=e=>{if(e.key==='Enter'||e.key===' '){e.preventDefault();toggle()}}});
   if(route==='/doctors'){const filter=()=>{const q=$('#doctor-search').value.toLowerCase(),dep=$('#doctor-dept').value,spec=$('#doctor-special').value;const list=state.doctors.filter(d=>(d.name+' '+d.specialization).toLowerCase().includes(q)&&(!dep||d.department===dep)&&(!spec||d.specialization===spec));$('#doctor-grid').innerHTML=doctorCards(list)};['doctor-search','doctor-dept','doctor-special'].forEach(id=>$('#'+id).addEventListener(id==='doctor-search'?'input':'change',filter))}
-  const ap=$('#appointment-form');if(ap){const doc=$('#doctor');const sync=()=>{const d=state.doctors.find(x=>x.name===doc.value);if(d)$('#department').value=d.department};sync();doc.onchange=sync;ap.onsubmit=async e=>{e.preventDefault();if(!ap.reportValidity())return;const b=$('button[type=submit]',ap);b.disabled=true;b.textContent='Sending…';try{const r=await api('/api/appointments',{method:'POST',body:JSON.stringify(formData(ap))});ap.reset();$('#form-result').innerHTML=`<div class="notice appointment-confirmation"><h3>Appointment Booked!</h3><p>Thank you! Your appointment number is <strong>${escape(r.appointment?.tokenNumber || r.reference)}</strong>.</p><p class="muted" style="font-size:.85rem;margin-bottom:12px">Download your official slip with VSM letterhead:</p><button class="btn" id="download-slip-btn" type="button">Download Slip (PDF)</button></div>`;const btn=$('#download-slip-btn');if(btn&&r.appointment)btn.onclick=()=>downloadPDF(r.appointment);toast('Appointment booked successfully')}catch(err){$('#form-result').innerHTML=`<div class="emergency">${escape(err.message)}</div>`}finally{b.disabled=false;b.textContent='Request appointment'}}}
+  const ap=$('#appointment-form');
+  if(ap){
+    const deptSelect=$('#department');
+    const docSelect=$('#doctor');
+    const updateDoctors = (selectedDocId = '') => {
+      const selectedDept = deptSelect.value;
+      const filteredDocs = selectedDept ? state.doctors.filter(d => d.department === selectedDept) : state.doctors;
+      let html = '<option value="">Select doctor</option>';
+      filteredDocs.forEach(d => {
+        const isSelected = selectedDocId === d.id || (docSelect.value === d.name && filteredDocs.some(fd => fd.name === docSelect.value)) ? 'selected' : '';
+        html += `<option value="${escape(d.name)}" data-id="${d.id}" ${isSelected}>${escape(d.name)}</option>`;
+      });
+      docSelect.innerHTML = html;
+    };
+    deptSelect.onchange = () => {
+      const prevDoc = docSelect.value;
+      updateDoctors();
+      const hasPrevDoc = [...docSelect.options].some(opt => opt.value === prevDoc);
+      if (hasPrevDoc) docSelect.value = prevDoc;
+      else docSelect.value = "";
+    };
+    docSelect.onchange = () => {
+      const doc = state.doctors.find(x => x.name === docSelect.value);
+      if (doc) {
+        deptSelect.value = doc.department;
+        updateDoctors(doc.id);
+      }
+    };
+    const params=new URLSearchParams(location.hash.split('?')[1]||'');
+    const selectedDocId=params.get('doctor')||'';
+    if (selectedDocId) {
+      const doc = state.doctors.find(x => x.id === selectedDocId);
+      if (doc) {
+        deptSelect.value = doc.department;
+        updateDoctors(selectedDocId);
+      } else {
+        updateDoctors();
+      }
+    } else {
+      updateDoctors();
+    }
+    ap.onsubmit=async e=>{
+      e.preventDefault();
+      if(!ap.reportValidity())return;
+      const b=$('button[type=submit]',ap);
+      b.disabled=true;
+      b.textContent='Sending…';
+      try{
+        const r=await api('/api/appointments',{method:'POST',body:JSON.stringify(formData(ap))});
+        ap.reset();
+        updateDoctors();
+        $('#form-result').innerHTML=`<div class="notice appointment-confirmation"><h3>Appointment Booked!</h3><p>Thank you! Your appointment number is <strong>${escape(r.appointment?.tokenNumber || r.reference)}</strong>.</p><p class="muted" style="font-size:.85rem;margin-bottom:12px">Download your official slip with VSM letterhead:</p><button class="btn" id="download-slip-btn" type="button">Download Slip (PDF)</button></div>`;
+        const btn=$('#download-slip-btn');
+        if(btn&&r.appointment)btn.onclick=async()=>await downloadPDF(r.appointment);
+        toast('Appointment booked successfully')
+      }catch(err){
+        $('#form-result').innerHTML=`<div class="emergency">${escape(err.message)}</div>`
+      }finally{
+        b.disabled=false;
+        b.textContent='Request appointment'
+      }
+    }
+  }
   const simple=[['contact-form','/api/contact','Thanks — our care team will contact you soon.'],['feedback-form','/api/feedback','Thank you. Your feedback has been shared with our care team.']];simple.forEach(([id,url,msg])=>{const f=$('#'+id);if(f)f.onsubmit=async e=>{e.preventDefault();try{await api(url,{method:'POST',body:JSON.stringify(formData(f))});f.reset();toast(msg)}catch(err){toast(err.message)}}});
   const lf=$('#login-form');if(lf)lf.onsubmit=async e=>{e.preventDefault();try{await api('/api/login',{method:'POST',body:JSON.stringify(formData(lf))});location.hash='#/admin'}catch(err){$('#form-result').innerHTML=`<div class="emergency">${escape(err.message)}</div>`}};
   if(route==='/admin')bindAdmin();
@@ -102,5 +186,53 @@ function bind(route){const menu=$('.menu');if(menu)menu.onclick=()=>{const n=$('
 function bindAdmin(){const logout=$('#logout');if(logout)logout.onclick=async()=>{await api('/api/logout',{method:'POST'});location.hash='#/admin/login'};$$('.tab').forEach(t=>t.onclick=()=>{$$('.tab').forEach(x=>x.classList.remove('active'));t.classList.add('active');$('#admin-panel').innerHTML=adminPanel(t.dataset.tab);bindAdminActions(t.dataset.tab)});bindAdminActions('appointments')}
 function bindAdminActions(tab){const panel=$('#admin-panel');if(!panel)return;panel.onclick=async e=>{const b=e.target.closest('button');if(!b)return;if(b.dataset.add){openModal(b.dataset.add)}if(b.dataset.editDoctor){openModal('doctor',state.admin.doctors.find(x=>x.id===b.dataset.editDoctor))}if(b.dataset.editEvent){openModal('event',state.admin.events.find(x=>x.id===b.dataset.editEvent))}if(b.dataset.editAppointment){openModal('appointment',state.admin.appointments.find(x=>x.id===b.dataset.editAppointment))}if(b.dataset.deleteDoctor&&confirm('Delete this doctor?'))await remove('doctors',b.dataset.deleteDoctor,tab);if(b.dataset.deleteEvent&&confirm('Delete this update?'))await remove('events',b.dataset.deleteEvent,tab);if(b.dataset.deleteAppointment&&confirm('Delete this appointment?'))await remove('appointments',b.dataset.deleteAppointment,tab)}}
 async function remove(type,id,tab){try{await api(`/api/admin/${type}/${id}`,{method:'DELETE'});const d=await api('/api/admin/overview');state.admin=d;state.doctors=d.doctors;state.events=d.events;$('#admin-panel').innerHTML=adminPanel(tab);bindAdminActions(tab);toast('Record deleted')}catch(e){toast(e.message)}}
-function openModal(kind,item={}){$('#admin-modal').innerHTML=modalForm(kind,item);$('[data-close]').onclick=()=>$('#admin-modal').innerHTML='';const docSelect=$('#admin-appt-doctor');const deptSelect=$('#admin-appt-dept');if(docSelect&&deptSelect){docSelect.onchange=()=>{const d=state.doctors.find(x=>x.name===docSelect.value);if(d)deptSelect.value=d.department}}const f=$('#admin-form');f.onsubmit=async e=>{e.preventDefault();const data=formData(f);const file=$('#photo-file');if(file?.files[0]){if(file.files[0].size>1_500_000){toast('Photo must be under 1.5 MB');return}data.photo=await new Promise(r=>{const fr=new FileReader();fr.onload=()=>r(fr.result);fr.readAsDataURL(file.files[0])})}if(kind==='doctor'&&!data.photo)data.photo='';const plural=kind==='doctor'?'doctors':(kind==='appointment'?'appointments':'events');try{await api(`/api/admin/${plural}${item.id?'/'+item.id:''}`,{method:item.id?'PUT':'POST',body:JSON.stringify(data)});state.admin=await api('/api/admin/overview');state.doctors=state.admin.doctors;state.events=state.admin.events;$('#admin-modal').innerHTML='';const tab=kind==='doctor'?'doctors':(kind==='appointment'?'appointments':'events');$('#admin-panel').innerHTML=adminPanel(tab);bindAdminActions(tab);$$('.tab').forEach(x=>x.classList.toggle('active',x.dataset.tab===tab));toast('Saved successfully')}catch(err){$('#form-result').innerHTML=`<div class="emergency">${escape(err.message)}</div>`}}}
+function openModal(kind,item={}){
+  $('#admin-modal').innerHTML=modalForm(kind,item);
+  $('[data-close]').onclick=()=>$('#admin-modal').innerHTML='';
+  const docSelect=$('#admin-appt-doctor');
+  const deptSelect=$('#admin-appt-dept');
+  if(docSelect&&deptSelect){
+    const updateAdminDoctors = () => {
+      const selectedDept = deptSelect.value;
+      const filteredDocs = selectedDept ? state.doctors.filter(d => d.department === selectedDept) : state.doctors;
+      const currentDoc = item.doctor || '';
+      let html = '<option value="">Select doctor</option>';
+      filteredDocs.forEach(d => {
+        const isSelected = d.name === currentDoc ? 'selected' : '';
+        html += `<option value="${escape(d.name)}" ${isSelected}>${escape(d.name)}</option>`;
+      });
+      docSelect.innerHTML = html;
+    };
+    deptSelect.onchange = () => {
+      updateAdminDoctors();
+    };
+    updateAdminDoctors();
+  }
+  const f=$('#admin-form');
+  f.onsubmit=async e=>{
+    e.preventDefault();
+    const data=formData(f);
+    const file=$('#photo-file');
+    if(file?.files[0]){
+      if(file.files[0].size>1_500_000){toast('Photo must be under 1.5 MB');return}
+      data.photo=await new Promise(r=>{const fr=new FileReader();fr.onload=()=>r(fr.result);fr.readAsDataURL(file.files[0])})
+    }
+    if(kind==='doctor'&&!data.photo)data.photo='';
+    const plural=kind==='doctor'?'doctors':(kind==='appointment'?'appointments':'events');
+    try{
+      await api(`/api/admin/${plural}${item.id?'/'+item.id:''}`,{method:item.id?'PUT':'POST',body:JSON.stringify(data)});
+      state.admin=await api('/api/admin/overview');
+      state.doctors=state.admin.doctors;
+      state.events=state.admin.events;
+      $('#admin-modal').innerHTML='';
+      const tab=kind==='doctor'?'doctors':(kind==='appointment'?'appointments':'events');
+      $('#admin-panel').innerHTML=adminPanel(tab);
+      bindAdminActions(tab);
+      $$('.tab').forEach(x=>x.classList.toggle('active',x.dataset.tab===tab));
+      toast('Saved successfully')
+    }catch(err){
+      $('#form-result').innerHTML=`<div class="emergency">${escape(err.message)}</div>`
+    }
+  }
+}
 window.addEventListener('hashchange',render);render();
