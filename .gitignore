@@ -1,0 +1,6 @@
+data/store.json
+.DS_Store
+npm-debug.log*
+server-error.log
+server-output.log
+node_modules/

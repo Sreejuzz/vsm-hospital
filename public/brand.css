@@ -1,0 +1,32 @@
+.brandmark {
+  width: 44px;
+  height: 44px;
+  background: #fff;
+  border: 1px solid #e3e9e7;
+  border-radius: 13px;
+  display: grid;
+  place-items: center;
+  overflow: hidden;
+  flex: none;
+}
+
+.brandmark img {
+  width: 100%;
+  height: 100%;
+  object-fit: contain;
+  padding: 4px;
+  display: block;
+}
+
+.admin-head .brandmark {
+  position: relative;
+  background: #fff !important;
+  font-size: 0;
+}
+
+.admin-head .brandmark::before {
+  content: '';
+  position: absolute;
+  inset: 4px;
+  background: url('/assets/logo.svg') center / contain no-repeat;
+}
