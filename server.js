@@ -14,12 +14,12 @@ const sessions = new Map();
 
 const seed = {
   doctors: [
-    {id:'d1',name:'Dr. Ananya Rao',department:'Cardiology',specialization:'Interventional Cardiology',qualification:'MBBS, MD, DM (Cardiology)',experience:14,availability:'Mon–Sat · 10:00 AM–2:00 PM',photo:'https://images.unsplash.com/photo-1559839734-2b71ea197ec2?auto=format&fit=crop&w=700&q=80'},
-    {id:'d2',name:'Dr. Arjun Menon',department:'Neurology',specialization:'Stroke & Movement Disorders',qualification:'MBBS, MD, DM (Neurology)',experience:12,availability:'Mon, Wed, Fri · 9:00 AM–1:00 PM',photo:'https://images.unsplash.com/photo-1612349317150-e413f6a5b16d?auto=format&fit=crop&w=700&q=80'},
-    {id:'d3',name:'Dr. Meera Iyer',department:'Paediatrics',specialization:'Neonatology',qualification:'MBBS, MD (Paediatrics), FIAP',experience:10,availability:'Mon–Fri · 11:00 AM–4:00 PM',photo:'https://images.unsplash.com/photo-1594824476967-48c8b964273f?auto=format&fit=crop&w=700&q=80'},
-    {id:'d4',name:'Dr. Vikram Shah',department:'Orthopaedics',specialization:'Joint Replacement',qualification:'MBBS, MS (Orthopaedics)',experience:18,availability:'Tue–Sat · 3:00 PM–7:00 PM',photo:'https://images.unsplash.com/photo-1537368910025-700350fe46c7?auto=format&fit=crop&w=700&q=80'},
-    {id:'d5',name:'Dr. Kavya Nair',department:'Obstetrics & Gynaecology',specialization:'High-risk Pregnancy',qualification:'MBBS, MS (OBG), FMAS',experience:11,availability:'Mon–Sat · 9:30 AM–1:30 PM',photo:'https://images.unsplash.com/photo-1651008376811-b90baee60c1f?auto=format&fit=crop&w=700&q=80'},
-    {id:'d6',name:'Dr. Rohan Kulkarni',department:'General Medicine',specialization:'Diabetes & Preventive Care',qualification:'MBBS, MD (Internal Medicine)',experience:9,availability:'Daily · 8:00 AM–12:00 PM',photo:'https://images.unsplash.com/photo-1622253692010-333f2da6031d?auto=format&fit=crop&w=700&q=80'}
+    {id:'d1',name:'Dr. Ananya Rao',department:'Cardiology',specialization:'Interventional Cardiology',qualification:'MBBS, MD, DM (Cardiology)',experience:14,availability:'Mon–Sat · 10:00 AM–2:00 PM',photo:'https://images.unsplash.com/photo-1559839734-2b71ea197ec2?auto=format&fit=crop&w=700&q=80',availableDates:'2026-06-20, 2026-06-22, 2026-06-23, 2026-06-24, 2026-06-25, 2026-06-26',startTime:'10:00 AM',endTime:'02:00 PM'},
+    {id:'d2',name:'Dr. Arjun Menon',department:'Neurology',specialization:'Stroke & Movement Disorders',qualification:'MBBS, MD, DM (Neurology)',experience:12,availability:'Mon, Wed, Fri · 9:00 AM–1:00 PM',photo:'https://images.unsplash.com/photo-1612349317150-e413f6a5b16d?auto=format&fit=crop&w=700&q=80',availableDates:'2026-06-22, 2026-06-24, 2026-06-26',startTime:'09:00 AM',endTime:'01:00 PM'},
+    {id:'d3',name:'Dr. Meera Iyer',department:'Paediatrics',specialization:'Neonatology',qualification:'MBBS, MD (Paediatrics), FIAP',experience:10,availability:'Mon–Fri · 11:00 AM–4:00 PM',photo:'https://images.unsplash.com/photo-1594824476967-48c8b964273f?auto=format&fit=crop&w=700&q=80',availableDates:'2026-06-22, 2026-06-23, 2026-06-24, 2026-06-25, 2026-06-26',startTime:'11:00 AM',endTime:'04:00 PM'},
+    {id:'d4',name:'Dr. Vikram Shah',department:'Orthopaedics',specialization:'Joint Replacement',qualification:'MBBS, MS (Orthopaedics)',experience:18,availability:'Tue–Sat · 3:00 PM–7:00 PM',photo:'https://images.unsplash.com/photo-1537368910025-700350fe46c7?auto=format&fit=crop&w=700&q=80',availableDates:'2026-06-20, 2026-06-23, 2026-06-24, 2026-06-25, 2026-06-26',startTime:'03:00 PM',endTime:'07:00 PM'},
+    {id:'d5',name:'Dr. Kavya Nair',department:'Obstetrics & Gynaecology',specialization:'High-risk Pregnancy',qualification:'MBBS, MS (OBG), FMAS',experience:11,availability:'Mon–Sat · 9:30 AM–1:30 PM',photo:'https://images.unsplash.com/photo-1651008376811-b90baee60c1f?auto=format&fit=crop&w=700&q=80',availableDates:'2026-06-20, 2026-06-22, 2026-06-23, 2026-06-24, 2026-06-25, 2026-06-26',startTime:'09:30 AM',endTime:'01:30 PM'},
+    {id:'d6',name:'Dr. Rohan Kulkarni',department:'General Medicine',specialization:'Diabetes & Preventive Care',qualification:'MBBS, MD (Internal Medicine)',experience:9,availability:'Daily · 8:00 AM–12:00 PM',photo:'https://images.unsplash.com/photo-1622253692010-333f2da6031d?auto=format&fit=crop&w=700&q=80',availableDates:'2026-06-20, 2026-06-21, 2026-06-22, 2026-06-23, 2026-06-24, 2026-06-25, 2026-06-26',startTime:'08:00 AM',endTime:'12:00 PM'}
   ],
   events: [
     {id:'e1',type:'Event',title:'Free Heart Health Screening Camp',date:'2026-07-12',excerpt:'ECG, blood pressure and cardiac risk review for adults over 40.',location:'VSM Community Hall'},
@@ -32,6 +32,37 @@ function ensureStore() { fs.mkdirSync(DATA_DIR,{recursive:true}); if(!fs.existsS
 function readStore(){
   ensureStore();
   const store = JSON.parse(fs.readFileSync(STORE,'utf8'));
+  let modified = false;
+  if (store.doctors && store.doctors.length) {
+    store.doctors.forEach(d => {
+      if (d.availableDates === undefined) {
+        d.availableDates = '2026-06-20, 2026-06-22, 2026-06-23, 2026-06-24, 2026-06-25, 2026-06-26';
+        modified = true;
+      }
+      if (d.startTime === undefined) {
+        const avail = d.availability || '';
+        if (avail.includes('10:00 AM')) d.startTime = '10:00 AM';
+        else if (avail.includes('9:00 AM')) d.startTime = '09:00 AM';
+        else if (avail.includes('11:00 AM')) d.startTime = '11:00 AM';
+        else if (avail.includes('3:00 PM')) d.startTime = '03:00 PM';
+        else if (avail.includes('9:30 AM')) d.startTime = '09:30 AM';
+        else if (avail.includes('8:00 AM')) d.startTime = '08:00 AM';
+        else d.startTime = '09:00 AM';
+        modified = true;
+      }
+      if (d.endTime === undefined) {
+        const avail = d.availability || '';
+        if (avail.includes('2:00 PM')) d.endTime = '02:00 PM';
+        else if (avail.includes('1:00 PM')) d.endTime = '01:00 PM';
+        else if (avail.includes('4:00 PM')) d.endTime = '04:00 PM';
+        else if (avail.includes('7:00 PM')) d.endTime = '07:00 PM';
+        else if (avail.includes('1:30 PM')) d.endTime = '01:30 PM';
+        else if (avail.includes('12:00 PM')) d.endTime = '12:00 PM';
+        else d.endTime = '05:00 PM';
+        modified = true;
+      }
+    });
+  }
   if (store.nextToken === undefined) {
     let maxToken = 0;
     if (store.appointments && store.appointments.length) {
@@ -41,6 +72,9 @@ function readStore(){
       });
     }
     store.nextToken = maxToken + 1;
+    modified = true;
+  }
+  if (modified) {
     const tmp=STORE+'.tmp'; fs.writeFileSync(tmp,JSON.stringify(store,null,2)); fs.renameSync(tmp,STORE);
   }
   return store;
@@ -71,6 +105,13 @@ async function api(req,res,url){
   if(method==='POST' && url.pathname==='/api/appointments'){
     const b=await body(req), required=['name','phone','age','gender','department','doctor','date','time','reason']; if(required.some(k=>!clean(b[k]))) return send(res,400,{error:'Please complete every required field.'}); if(!validPhone(clean(b.phone))) return send(res,400,{error:'Enter a valid phone number.'});
     const data=readStore();
+    const docRecord=data.doctors.find(d=>d.name===clean(b.doctor));
+    if(docRecord){
+      const dates=(docRecord.availableDates||'').split(',').map(s=>s.trim()).filter(Boolean);
+      if(dates.length && !dates.includes(clean(b.date))){
+        return send(res,400,{error:`The selected doctor is not available on ${clean(b.date)}. Please select an available date.`});
+      }
+    }
     const token=data.nextToken||1;
     data.nextToken=token+1;
     const record={id:String(token),tokenNumber:token,createdAt:new Date().toISOString(),status:'Pending',...Object.fromEntries(required.map(k=>[k,clean(b[k],k==='reason'?1000:200)]))};
@@ -107,7 +148,7 @@ async function api(req,res,url){
   }
 
   const doctorMatch=url.pathname.match(/^\/api\/admin\/doctors(?:\/([^/]+))?$/);
-  if(doctorMatch && ['POST','PUT','DELETE'].includes(method)){const data=readStore();if(method==='DELETE'){data.doctors=data.doctors.filter(x=>x.id!==doctorMatch[1]);writeStore(data);return send(res,200,{ok:true});}const b=await body(req);const fields=['name','department','specialization','qualification','experience','availability','photo'];if(fields.slice(0,6).some(k=>!clean(b[k])))return send(res,400,{error:'Complete all doctor fields.'});const record={id:doctorMatch[1]||id('d'),...Object.fromEntries(fields.map(k=>[k,k==='experience'?Number(b[k]):clean(b[k],b[k]?.startsWith?.('data:')?2_000_000:500)]))};if(method==='POST')data.doctors.unshift(record);else{const i=data.doctors.findIndex(x=>x.id===doctorMatch[1]);if(i<0)return send(res,404,{error:'Doctor not found'});data.doctors[i]=record;}writeStore(data);return send(res,200,record);}
+  if(doctorMatch && ['POST','PUT','DELETE'].includes(method)){const data=readStore();if(method==='DELETE'){data.doctors=data.doctors.filter(x=>x.id!==doctorMatch[1]);writeStore(data);return send(res,200,{ok:true});}const b=await body(req);const fields=['name','department','specialization','qualification','experience','availability','photo','availableDates','startTime','endTime'];const required=['name','department','specialization','qualification','experience','availability','availableDates','startTime','endTime'];if(required.some(k=>!clean(b[k])))return send(res,400,{error:'Complete all required doctor fields.'});const record={id:doctorMatch[1]||id('d'),...Object.fromEntries(fields.map(k=>[k,k==='experience'?Number(b[k]):clean(b[k],b[k]?.startsWith?.('data:')?2_000_000:500)]))};if(method==='POST')data.doctors.unshift(record);else{const i=data.doctors.findIndex(x=>x.id===doctorMatch[1]);if(i<0)return send(res,404,{error:'Doctor not found'});data.doctors[i]=record;}writeStore(data);return send(res,200,record);}
   const eventMatch=url.pathname.match(/^\/api\/admin\/events(?:\/([^/]+))?$/);
   if(eventMatch && ['POST','PUT','DELETE'].includes(method)){const data=readStore();if(method==='DELETE'){data.events=data.events.filter(x=>x.id!==eventMatch[1]);writeStore(data);return send(res,200,{ok:true});}const b=await body(req),fields=['type','title','date','excerpt','location'];if(fields.some(k=>!clean(b[k])))return send(res,400,{error:'Complete all event fields.'});const record={id:eventMatch[1]||id('e'),...Object.fromEntries(fields.map(k=>[k,clean(b[k],800)]))};if(method==='POST')data.events.unshift(record);else{const i=data.events.findIndex(x=>x.id===eventMatch[1]);if(i<0)return send(res,404,{error:'Event not found'});data.events[i]=record;}writeStore(data);return send(res,200,record);}
   send(res,404,{error:'Not found'});
